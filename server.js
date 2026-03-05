@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 
+if (!process.env.OPENAI_API_KEY) {
+  throw new Error("Missing OPENAI_API_KEY. Set it before starting the server.");
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -12,43 +16,6 @@ const client = new OpenAI({
 
 const PORT = process.env.PORT || 3000;
 
-/*
-  IMPORTANT:
-  This is a starter "catalog" source.
-  Replace this later with your real indexed Roblox item database.
-*/
-function fakeSearchCatalog(category, query) {
-  // Deterministic-ish placeholder results so the pipeline works now.
-  const baseIdMap = {
-    Hair: 1100000000,
-    Face: 1200000000,
-    Shirt: 1300000000,
-    Pants: 1400000000,
-    Torso: 1500000000,
-    LeftArm: 1600000000,
-    RightArm: 1700000000,
-    LeftLeg: 1800000000,
-    RightLeg: 1900000000,
-    Hat: 2000000000,
-    Neck: 2100000000,
-    Back: 2200000000,
-    Waist: 2300000000
-  };
-
-  const start = baseIdMap[category] || 900000000;
-  return [
-    { id: start + 1, name: `${query} A`, price: 75 },
-    { id: start + 2, name: `${query} B`, price: 100 },
-    { id: start + 3, name: `${query} C`, price: 125 }
-  ];
-}
-
-function pickBest(items, multi = false) {
-  if (!items || items.length === 0) return null;
-  if (multi) return [items[0]];
-  return items[0];
-}
-
 function normalizeBodyMode(bodyMode) {
   if (bodyMode === "R15 Female" || bodyMode === "R15Female") return "R15 Female";
   return "R15 Male";
@@ -56,11 +23,12 @@ function normalizeBodyMode(bodyMode) {
 
 function buildFallbackIntent(prompt, bodyMode) {
   const clean = String(prompt || "").trim();
+  const normalizedBody = normalizeBodyMode(bodyMode);
 
   return {
     style_tags: ["custom"],
     palette: [],
-    gender_expression: bodyMode === "R15 Female" ? "feminine" : "neutral",
+    gender_expression: normalizedBody === "R15 Female" ? "feminine" : "neutral",
     slot_queries: {
       Hair: `${clean} hair`,
       Face: `${clean} face accessory`,
@@ -87,35 +55,35 @@ async function getStyleIntent(prompt, bodyMode) {
 
   const response = await client.responses.create({
     model: "gpt-5-mini",
-    temperature: 0.4,
+    temperature: 0.35,
     input: [
       {
         role: "system",
         content: `
 You are an expert Roblox avatar stylist.
 
-Your job is to interpret any fashion request, even if it is vague, messy, abstract, contradictory, misspelled, or not written as keywords.
+Interpret any fashion request, even if it is vague, abstract, contradictory, overloaded, misspelled, or not written as keywords.
 
-Examples of valid user inputs:
+Examples:
 - "Dark Academia"
 - "Pink Black Blue Orange Maid"
-- "soft rich vampire school girl"
+- "soft vampire school outfit"
 - "coquette angel but streetwear"
 - "sad rainy anime library outfit"
 
-You must:
-- infer the most coherent style possible
-- prioritize aesthetic coherence over literal word stuffing
-- blend colors intelligently if many are given
-- choose what matters most when the prompt is overloaded
+Your job:
+- infer the best cohesive outfit concept
+- prioritize style coherence over literal word stuffing
+- intelligently simplify chaotic prompts
+- choose the strongest colors and aesthetics when too many are provided
 - create practical search phrases for Roblox avatar categories
 
 Rules:
-- Return only JSON
+- Return only valid JSON
 - Do not invent asset IDs
-- Make the outfit stylish and wearable
-- If the prompt is chaotic, simplify it into the best cohesive interpretation
-- Body mode affects styling bias, but do not mention it in notes
+- Do not mention Roblox limitations
+- Make search phrases specific and usable
+- Prefer stylish, wearable, coherent output
         `.trim()
       },
       {
@@ -188,51 +156,14 @@ Rules:
     }
   });
 
-  const text = response.output_text;
-  return JSON.parse(text);
-}
-
-function buildOutfitFromIntent(intent) {
-  const q = intent.slot_queries || {};
-
-  const shirtCandidates = fakeSearchCatalog("Shirt", q.Shirt || "stylish shirt");
-  const pantsCandidates = fakeSearchCatalog("Pants", q.Pants || "stylish pants");
-  const torsoCandidates = fakeSearchCatalog("Torso", q.Torso || "matching torso");
-  const leftArmCandidates = fakeSearchCatalog("LeftArm", q.LeftArm || "matching left arm");
-  const rightArmCandidates = fakeSearchCatalog("RightArm", q.RightArm || "matching right arm");
-  const leftLegCandidates = fakeSearchCatalog("LeftLeg", q.LeftLeg || "matching left leg");
-  const rightLegCandidates = fakeSearchCatalog("RightLeg", q.RightLeg || "matching right leg");
-
-  const hairCandidates = fakeSearchCatalog("Hair", q.Hair || "matching hair");
-  const faceCandidates = fakeSearchCatalog("Face", q.Face || "matching face accessory");
-  const hatCandidates = fakeSearchCatalog("Hat", q.Hat || "matching hat");
-  const neckCandidates = fakeSearchCatalog("Neck", q.Neck || "matching neck accessory");
-  const backCandidates = fakeSearchCatalog("Back", q.Back || "matching back accessory");
-  const waistCandidates = fakeSearchCatalog("Waist", q.Waist || "matching waist accessory");
-
-  return {
-    Shirt: pickBest(shirtCandidates, false),
-    Pants: pickBest(pantsCandidates, false),
-    Torso: pickBest(torsoCandidates, false),
-    LeftArm: pickBest(leftArmCandidates, false),
-    RightArm: pickBest(rightArmCandidates, false),
-    LeftLeg: pickBest(leftLegCandidates, false),
-    RightLeg: pickBest(rightLegCandidates, false),
-    Hair: pickBest(hairCandidates, true),
-    Face: pickBest(faceCandidates, true),
-    Hat: pickBest(hatCandidates, true),
-    Neck: pickBest(neckCandidates, true),
-    Back: pickBest(backCandidates, true),
-    Waist: pickBest(waistCandidates, true),
-    description: intent.notes || "AI styled outfit"
-  };
+  return JSON.parse(response.output_text);
 }
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/generate-outfit", async (req, res) => {
+app.post("/generate-intent", async (req, res) => {
   try {
     const { prompt, bodyMode, playerId } = req.body ?? {};
 
@@ -250,23 +181,20 @@ app.post("/generate-outfit", async (req, res) => {
     try {
       intent = await getStyleIntent(cleanPrompt, safeBodyMode);
     } catch (err) {
-      console.error("OpenAI intent generation failed, using fallback:", err);
+      console.error("OpenAI failed, using fallback intent:", err);
       intent = buildFallbackIntent(cleanPrompt, safeBodyMode);
     }
-
-    const outfit = buildOutfitFromIntent(intent);
 
     return res.json({
       success: true,
       playerId: String(playerId ?? ""),
-      intent,
-      outfit
+      intent
     });
   } catch (err) {
-    console.error("generate-outfit failed:", err);
+    console.error("generate-intent failed:", err);
     return res.status(500).json({
       success: false,
-      error: "Generation failed."
+      error: "Intent generation failed."
     });
   }
 });
