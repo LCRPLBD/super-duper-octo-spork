@@ -81,7 +81,7 @@ async function getStyleIntent(prompt, bodyMode, variation) {
     : `The player is using a MALE avatar. Strongly prioritize masculine, men's, and boys' clothing and accessories. Use search terms like "masculine", "men's", "boy", "tough", "sharp" where appropriate. Avoid feminine or women's items unless the prompt specifically asks for them.`;
 
   const response = await client.responses.create({
-    model: "gpt-5-mini",
+    model: "gpt-4o-mini",
     temperature: 0.9,
     input: [
       {
@@ -165,7 +165,7 @@ Rules:
                 Back: { type: "string" },
                 Waist: { type: "string" }
               },
-              required: ["Shirt", "Pants"]
+              required: ["Hair", "Face", "Shirt", "Pants", "Torso", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Hat", "Neck", "Back", "Waist"]
             },
             must_have: {
               type: "array",
