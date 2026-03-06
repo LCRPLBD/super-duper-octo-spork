@@ -44,27 +44,27 @@ function buildFallbackIntent(prompt, bodyMode) {
   const normalizedBody = normalizeBodyMode(bodyMode);
   const isFemale = normalizedBody === "R15 Female";
 
-  // Add gender hint to search queries
-  const genderHint = isFemale ? "feminine" : "masculine";
+  // Keep queries SHORT — 2-3 words like real Roblox catalog searches
+  const g = isFemale ? "cute" : "cool";
 
   return {
     style_tags: ["custom"],
     palette: [],
     gender_expression: isFemale ? "feminine" : "masculine",
     slot_queries: {
-      Hair: `${genderHint} ${clean} hair`,
-      Face: `${clean} face accessory`,
-      Shirt: `${genderHint} ${clean} shirt`,
-      Pants: `${genderHint} ${clean} pants`,
-      Torso: `${genderHint} ${clean} torso`,
-      LeftArm: `${clean} left arm`,
-      RightArm: `${clean} right arm`,
-      LeftLeg: `${clean} left leg`,
-      RightLeg: `${clean} right leg`,
+      Hair: `${g} hair`,
+      Face: `${clean} face`,
+      Shirt: `${g} ${clean} shirt`,
+      Pants: `${g} ${clean} pants`,
+      Torso: `${clean} torso`,
+      LeftArm: `${clean} arm`,
+      RightArm: `${clean} arm`,
+      LeftLeg: `${clean} leg`,
+      RightLeg: `${clean} leg`,
       Hat: `${clean} hat`,
-      Neck: `${clean} neck accessory`,
-      Back: `${clean} back accessory`,
-      Waist: `${clean} waist accessory`
+      Neck: `${clean} necklace`,
+      Back: `${clean} backpack`,
+      Waist: `${clean} belt`
     },
     must_have: ["Shirt", "Pants"],
     optional: ["Hair", "Face", "Hat", "Neck", "Back", "Waist"],
@@ -76,56 +76,61 @@ async function getStyleIntent(prompt, bodyMode, variation) {
   const safeBodyMode = normalizeBodyMode(bodyMode);
   const isFemale = safeBodyMode === "R15 Female";
 
+  const genderWord = isFemale ? "girl" : "boy";
   const genderDirective = isFemale
-    ? `The player is using a FEMALE avatar. Strongly prioritize feminine, women's, and girls' clothing and accessories. Use search terms like "feminine", "women's", "girl", "cute", "elegant" where appropriate. Avoid masculine or men's items unless the prompt specifically asks for them.`
-    : `The player is using a MALE avatar. Strongly prioritize masculine, men's, and boys' clothing and accessories. Use search terms like "masculine", "men's", "boy", "tough", "sharp" where appropriate. Avoid feminine or women's items unless the prompt specifically asks for them.`;
+    ? `Avatar is FEMALE. Bias queries toward feminine/cute/women's styles. Add words like "girl", "cute", "pretty", "pink" when they fit the style.`
+    : `Avatar is MALE. Bias queries toward masculine/cool/men's styles. Add words like "boy", "cool", "tough", "dark" when they fit the style.`;
 
   const response = await client.responses.create({
     model: "gpt-4o-mini",
-    temperature: 0.9,
+    temperature: 0.75,
     input: [
       {
         role: "system",
         content: `
-You are an expert Roblox avatar stylist.
-
-Interpret any fashion request, even if it is vague, abstract, contradictory, overloaded, misspelled, or not written as keywords.
+You are a Roblox avatar outfit builder. You turn style prompts into SHORT search queries for the Roblox avatar catalog.
 
 ${genderDirective}
 
-IMPORTANT — VARIETY RULE:
-Every time you receive a prompt, you MUST create a DIFFERENT outfit variation, even if the prompt is identical to a previous one. Use the provided variation seed to inspire different choices — pick different colors, silhouettes, sub-styles, brands, or aesthetic angles each time. Never repeat the same combination of search queries twice.
+CRITICAL — SEARCH QUERY RULES:
+Roblox catalog search is VERY simple. Long or fancy queries return NO results.
+- Each query MUST be 2-4 words MAX
+- Use simple, common words that Roblox creators actually name their items
+- DO NOT use abstract fashion terms like "structured", "deconstructed", "silhouette", "avant-garde"
+- DO NOT add "Roblox" or "avatar" to queries
+- DO NOT stack multiple adjectives — pick ONE color or ONE style word + the item type
 
-Variation seed for this request: "${variation.words.join(" ")}" (ID: ${variation.id})
-Use this seed to push your choices in a unique direction. For example, if the seed says "bold vintage", lean into retro statement pieces. If it says "minimal dark", go for understated black/gray items.
+GOOD search queries (these WORK):
+- "black hoodie"
+- "white crop top"
+- "dark pants"
+- "blonde hair"
+- "red cap"
+- "angel wings"
+- "gold chain"
+- "plaid skirt"
+- "cute dress shirt"
+- "messy brown hair"
+- "black boots"
+- "demon horns"
 
-Examples of prompts:
-- "Dark Academia"
-- "Pink Black Blue Orange Maid"
-- "soft vampire school outfit"
-- "coquette angel but streetwear"
-- "sad rainy anime library outfit"
+BAD search queries (these return NOTHING):
+- "masculine dark academia vintage structured wool hoodie" (way too long)
+- "feminine elegant soft pastel cottagecore blouse" (too many adjectives)
+- "deconstructed avant-garde asymmetric top" (nobody names items like this)
+- "men's sophisticated charcoal trousers" (not how Roblox items are named)
 
-Your job:
-- infer the best cohesive outfit concept
-- prioritize style coherence over literal word stuffing
-- intelligently simplify chaotic prompts
-- choose the strongest colors and aesthetics when too many are provided
-- create practical search phrases for Roblox avatar categories
-- VARY your output each time — never give the same outfit twice
+VARIETY: Use the variation seed to pick DIFFERENT colors/substyles each time.
+Seed: "${variation.words.join(" ")}" #${variation.id}
 
-Rules:
-- Return only valid JSON
-- Do not invent asset IDs
-- Do not mention Roblox limitations
-- Make search phrases specific and usable
-- Prefer stylish, wearable, coherent output
-- Include gender-appropriate terms in search queries (e.g. "men's dark hoodie" or "women's plaid skirt")
+If the seed suggests "bold" — pick brighter colors. If "subtle" — pick muted tones. If "vintage" — pick retro items. etc.
+
+For each slot, write a query that a Roblox player would actually type into the catalog search bar.
         `.trim()
       },
       {
         role: "user",
-        content: `Prompt: "${prompt}"\nBody Mode: "${safeBodyMode}"\nVariation: ${variation.words.join(" ")} #${variation.id}`
+        content: `Style: "${prompt}"\nAvatar: ${genderWord}\nSeed: ${variation.words.join(" ")}`
       }
     ],
     text: {
